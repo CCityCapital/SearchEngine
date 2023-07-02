@@ -8,6 +8,8 @@ packages = [{include = "corpus_query"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+sentence-transformers = "^2.2.2"
+weaviate-client = "^3.19.2"
 
 
 [build-system]
