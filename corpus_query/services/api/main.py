@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import logging
 
 from corpus_query.services.ingestion.chunk import chunk_file_by_line
+from corpus_query.services.vector_db.client import ArticleSnippet, VectorDbClient
 
 app = FastAPI()
 
@@ -22,14 +23,24 @@ logging.basicConfig(level=logging.INFO)
 def add_corpus(file: UploadFile):
     logging.info("received file: '%s'", file.filename)
 
-    chunked_file_contents = list(chunk_file_by_line(file.file.read().decode()))
+    c = VectorDbClient()
+    c.create_schema()
 
-    logging.info("chunked file into %d lines", len(chunked_file_contents))
+    article_snippets = list(
+        ArticleSnippet(file.filename, snippet)
+        for snippet in chunk_file_by_line(file.file.read().decode())
+    )
 
-    print(chunked_file_contents)
-    return {"filename": file.filename}
+    logging.info("chunked file into %d lines", len(article_snippets))
+
+    c.upload_data(article_snippets)
+    return {
+        "message": f"uploaded {file.filename} with {len(article_snippets)} snippets"
+    }
 
 
-@app.post("/corpus/{corpus_id}/question")
-def ask_question(corpus_id: int, question: QuestionRequest):
-    pass
+@app.post("/corpus/question")
+def ask_question(question: QuestionRequest):
+    c = VectorDbClient()
+
+    return c.query_from_string(question.question, limit=5)

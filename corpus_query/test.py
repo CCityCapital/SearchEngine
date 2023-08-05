@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 from typing import List
 import wikipedia
 from diskcache import Cache
@@ -12,10 +13,19 @@ cache = Cache("./script_cache")
 
 def get_chunked_contents(article_title) -> List[str]:
     if article_title in cache:
-        print("cache hit")
+        logging.info("cache hit: %s", article_title)
         return cache[article_title]
 
-    article_content = wikipedia.page(article_title)
+    else:
+        logging.info("cache miss: %s", article_title)
+        logging.info("pulling: %s", article_title)
+
+    try:
+        article_content = wikipedia.page(article_title)
+    except wikipedia.DisambiguationError as e:
+        s = random.choice(e.options)
+        article_content = wikipedia.page(s)
+
     chunked_content = list(chunk_file_by_line(article_content.content))
 
     cache[article_title] = chunked_content
@@ -25,12 +35,19 @@ def get_chunked_contents(article_title) -> List[str]:
 
 logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
-    c = VectorDbClient(url="http://localhost:8080")
+    c = VectorDbClient()
 
-    class_name = "Wikipedia"
-    c.create_schema(class_name)
+    c.create_schema()
 
-    articles_to_index = ["Crocodiles", "Barack Obama", "Bitcoin", "Leopard"]
+    articles_to_index = [
+        "Obama",
+        "Crocodile",
+        "Chicken",
+        "England",
+        "Spain",
+        "France",
+        "Cobalt",
+    ]
 
     article_titles = (wikipedia.search(article)[0] for article in articles_to_index)
 
@@ -47,11 +64,11 @@ if __name__ == "__main__":
             ArticleSnippet(article_title, snippet) for snippet in chunked_content
         ]
 
-        c.upload_data(class_name, article_snippets)
+        c.upload_data(article_snippets)
 
     print(
         json.dumps(
-            c.query_from_string(class_name, "When was bitcoin created?", limit=5),
+            c.query_from_string("When was bitcoin created?", limit=5),
             indent=2,
         )
     )
