@@ -3,13 +3,17 @@ name = "corpus-query"
 version = "0.1.0"
 description = ""
 authors = ["Anthony Rolland <6172844+LaconicPneumonic@users.noreply.github.com>"]
-readme = "README.md"
-packages = [{include = "corpus_query"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 sentence-transformers = "^2.2.2"
 weaviate-client = "^3.19.2"
+fastapi = "^0.100.0"
+uvicorn = {extras = ["standard"], version = "^0.22.0"}
+pydantic = "^2.0.2"
+python-multipart = "^0.0.6"
+wikipedia = "^1.4.0"
+diskcache = "^5.6.1"
 
 
 [build-system]

@@ -1,1 +1,4 @@
-.venv
+.venv/
+script_cache/
+.vscode/
+__pycache__/
