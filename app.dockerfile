@@ -6,6 +6,7 @@ RUN addgroup -gid 1001 appuser && \
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache \
     POETRY_VERSION=1.5.1 \
     POETRY_INSTALLER_MAX_WORKERS=3 \
     POETRY_HOME="/opt/poetry" \
@@ -25,9 +26,10 @@ WORKDIR $APP_PATH/
 COPY --chown=appuser:appuser-group ./pyproject.toml $APP_PATH/
 COPY --chown=appuser:appuser-group ./poetry.lock $APP_PATH/
 
-RUN poetry install
+RUN poetry install --without dev --no-root --no-cache && rm -rf $POETRY_CACHE_DIR
 
 COPY --chown=appuser:appuser-group corpus_query $APP_PATH/corpus_query
-RUN poetry install
 
-CMD ["poetry", "run", "uvicorn", "corpus_query.services.api.main:app", "--port", "8000", "--host", "0.0.0.0"]
+RUN poetry install --without dev
+
+CMD  ["poetry", "run", "uvicorn", "corpus_query.services.api.main:app", "--port", "8000", "--host", "0.0.0.0"]

@@ -31,14 +31,3 @@ services:
       VECTOR_DB_URL: "http://weaviate:8080"
     depends_on:
       - weaviate
-    command:
-      [
-        "poetry",
-        "run",
-        "uvicorn",
-        "corpus_query.services.api.main:app",
-        "--port",
-        "8000",
-        "--host",
-        "0.0.0.0",
-      ]
