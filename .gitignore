@@ -1,1 +1,6 @@
-.venv
+.venv/
+script_cache/
+.vscode/
+__pycache__/
+cdk.out/
+cdk.context.json
