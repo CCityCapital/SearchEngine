@@ -1,5 +1,6 @@
 import argparse
 from enum import Enum
+import logging
 from typing import Generator, Optional
 
 from langchain.text_splitter import (
@@ -30,6 +31,7 @@ class FileTypes(Enum):
     MARKDOWN = "md"
     TEXT = "txt"
     HTML = "html"
+    PDF = "pdf"
 
 
 class ChunkingOptions(BaseModel):
@@ -47,6 +49,7 @@ headers_to_split_on = [
 def chunk_by_file_type(
     corpus_text: str, file_type: FileTypes, options: Optional[ChunkingOptions] = None
 ) -> list[Document]:
+    logging.info("chunking value: '%s'", corpus_text)
     if options is None:
         options = ChunkingOptions(chunk_size=100, chunk_overlap=20)
 
@@ -76,7 +79,7 @@ def chunk_by_file_type(
         chunk_size=options.chunk_size,
         chunk_overlap=options.chunk_overlap,
     )
-    return [Document(s) for s in text_splitter.split_text(corpus_text)]
+    return [Document(page_content=s) for s in text_splitter.split_text(corpus_text)]
 
 
 if __name__ == "__main__":

@@ -2,8 +2,8 @@ import logging
 import random
 from typing import List, Optional, Tuple
 
-import wikipedia
 from fastapi import FastAPI, File, UploadFile
+from langchain.document_loaders import PyPDFLoader
 from pydantic import BaseModel
 
 from corpus_query.services.ingestion.chunk import (
@@ -32,20 +32,6 @@ class WikiRequest(BaseModel):
 logging.basicConfig(level=logging.INFO)
 
 
-def get_wikipedia_text(article_title) -> Optional[Tuple[str, str]]:
-    try:
-        try:
-            article_content = wikipedia.page(article_title)
-        except wikipedia.DisambiguationError as e:
-            s = random.choice(e.options)
-            article_content = wikipedia.page(s)
-
-        return article_content.content, article_content.url
-
-    except Exception as e:
-        logging.error("error getting chunked content for %s", article_title)
-
-
 @app.get("/")
 def get_hello_world():
     return "Hello World"
@@ -54,34 +40,32 @@ def get_hello_world():
 @app.post("/load_wikipedia")
 def load_wikipedia_corpus(corpus: WikiRequest, options: Optional[ChunkingOptions]):
     c = VectorDbClient()
-
     c.create_schema()
 
-    article_titles = (wikipedia.search(article)[0] for article in corpus.article_names)
-
-    chunked_contents = (
-        (article.title(), get_wikipedia_text(article.title()))
-        for article in article_titles
-    )
-
     ret = []
-    for article_title, content_pair in chunked_contents:
-        if content_pair is None:
-            ret.append(f"failed to get content for '{article_title}'")
-            continue
 
-        chunked_content, url = content_pair
+    for article_title in corpus.article_names:
+        query = f"https://en.wikipedia.org/api/rest_v1/page/pdf/{article_title}"
+        logging.info("loading '%s'", query)
+        loader = PyPDFLoader(query)
 
-        article_snippets = chunk_by_file_type(
-            chunked_content, FileTypes.MARKDOWN, options
-        )
+        documents = loader.load_and_split()
 
-        c.upload_data(
-            [ArticleSnippet(article_title, s.page_content) for s in article_snippets]
-        )
+        logging.info("loaded '%s'", query)
+
+        snippets = []
+        for d in documents:
+            for snippet in chunk_by_file_type(d.page_content, FileTypes.PDF, options):
+                logging.info(snippet)
+                snippets.append(snippet)
+
+        logging.info("snipped '%s'", query)
+
+        c.upload_data([ArticleSnippet(article_title, d.page_content) for d in snippets])
+        logging.info("done w/ '%s'", query)
 
         ret.append(
-            f"uploaded '{article_title}' ({url}) with {len(article_snippets)} snippets"
+            f"uploaded '{article_title}' ({query}) with {len(snippets)} snippets"
         )
 
     return {"message": ret}

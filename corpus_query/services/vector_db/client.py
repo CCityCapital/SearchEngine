@@ -19,10 +19,12 @@ class VectorDbClient:
 
     def __post_init__(self):
         self.client = weaviate.Client(self.url)
+        logging.info("client loaded from %s", self.url)
 
     def create_schema(self):
         try:
             self.client.schema.get(self.class_name)
+            logging.info("found schema")
 
         except weaviate.exceptions.UnexpectedStatusCodeException as e:
             logging.info("class %s does not exist. creating ...", self.class_name)
