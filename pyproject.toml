@@ -12,8 +12,9 @@ fastapi = "^0.100.0"
 uvicorn = {extras = ["standard"], version = "^0.22.0"}
 pydantic = "^2.0.2"
 python-multipart = "^0.0.6"
-wikipedia = "^1.4.0"
 diskcache = "^5.6.1"
+langchain = "^0.0.294"
+pypdf = "^3.16.1"
 
 
 [tool.poetry.group.dev.dependencies]
