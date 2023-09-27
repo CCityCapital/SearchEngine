@@ -39,6 +39,15 @@ def get_hello_world():
 
 @app.post("/load_wikipedia")
 def load_wikipedia_corpus(corpus: WikiRequest, options: Optional[ChunkingOptions]):
+    """Input a list of wikipedia article names and load them into the vector db.
+
+    Args:
+        corpus (WikiRequest): List of article names i.e. the content after 'https://en.wikipedia.org/wiki/' in the wikipedia title
+        options (Optional[ChunkingOptions]): chunking options. 250, 50 is a good setup
+
+    Returns:
+        Dict: Response document
+    """
     c = VectorDbClient()
     c.create_schema()
 
