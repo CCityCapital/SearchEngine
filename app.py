@@ -1,11 +1,16 @@
+from typing import Tuple
 from aws_cdk import (
     Environment,
     Fn,
+    aws_autoscaling as autoscaling,
     aws_ec2 as ec2,
     aws_ecs as ecs,
     aws_ecs_patterns as ecs_patterns,
+    aws_ecr as ecr,
     aws_ecr_assets as ecr_assets,
+    aws_events as events,
     App,
+    CfnOutput,
     Stack,
 )
 from constructs import Construct
@@ -32,7 +37,7 @@ class CorpusStack(Stack):
             cluster_name=f"{construct_id}-qa-cluster",
         )
 
-        vector_db = self.create_vector_db()
+        vector_db, embedding_service = self.create_vector_db()
 
         qa_api = ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
@@ -64,7 +69,12 @@ class CorpusStack(Stack):
             task_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
         )
 
-    def create_vector_db(self) -> ecs_patterns.ApplicationLoadBalancedFargateService:
+    def create_vector_db(
+        self,
+    ) -> Tuple[
+        ecs_patterns.ApplicationLoadBalancedFargateService,
+        ecs_patterns.ApplicationLoadBalancedFargateService,
+    ]:
         backend_subnets = ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC)
 
         embedding_service = ecs_patterns.ApplicationLoadBalancedFargateService(
@@ -131,7 +141,7 @@ class CorpusStack(Stack):
         )
 
         vector_db.node.add_dependency(embedding_service)
-        return vector_db
+        return vector_db, embedding_service
 
 
 app = App()
