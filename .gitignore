@@ -4,3 +4,4 @@ script_cache/
 __pycache__/
 cdk.out/
 cdk.context.json
+*.env

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import List, Optional
+from typing import List
 
 import weaviate
 from fastapi import FastAPI, UploadFile
@@ -18,7 +18,7 @@ from llama_index.schema import BaseNode
 from llama_index.vector_stores import WeaviateVectorStore
 from pydantic import BaseModel
 
-from corpus_query.services.ingestion.chunk import ChunkingOptions, FileTypes
+logging.basicConfig(level=logging.INFO)
 
 # connect to your weaviate instance
 # define LLM
@@ -36,7 +36,7 @@ set_global_service_context(service_context)
 client = weaviate.Client(
     url=os.getenv("VECTOR_DB_URL"),
     # embedded_options=weaviate.embedded.EmbeddedOptions(),
-    additional_headers={"X-OpenAI-Api-Key": os.environ["OPENAI_API_KEY"]},
+    additional_headers={"X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY")},
 )
 
 
@@ -49,12 +49,10 @@ vector_store = WeaviateVectorStore(
 storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
 # set up the index
+index = VectorStoreIndex.from_vector_store(vector_store)
 
 
 app = FastAPI()
-
-
-index = None
 
 
 def chunk_by_file_type(docs: List[Document]) -> List[BaseNode]:
@@ -62,20 +60,12 @@ def chunk_by_file_type(docs: List[Document]) -> List[BaseNode]:
     return parser.get_nodes_from_documents(docs)
 
 
-class CorpusRequest(BaseModel):
-    corpus: str
-
-
 class QuestionRequest(BaseModel):
     question: str
-    limit: Optional[int] = 5
 
 
 class WikiRequest(BaseModel):
     article_names: List[str]
-
-
-logging.basicConfig(level=logging.INFO)
 
 
 @app.get("/")
@@ -84,7 +74,7 @@ def get_hello_world():
 
 
 @app.post("/load_wikipedia")
-def load_wikipedia_corpus(corpus: WikiRequest, options: Optional[ChunkingOptions]):
+def load_wikipedia_corpus(corpus: WikiRequest):
     """Input a list of wikipedia article names and load them into the vector db.
 
     Args:
@@ -99,31 +89,33 @@ def load_wikipedia_corpus(corpus: WikiRequest, options: Optional[ChunkingOptions
     ret = []
 
     for article_title in corpus.article_names:
-        query = f"https://en.wikipedia.org/api/rest_v1/page/pdf/{article_title}"
-        logging.info("loading '%s'", query)
-        loader = PyPDFLoader(query)
+        try:
+            query = f"https://en.wikipedia.org/api/rest_v1/page/pdf/{article_title}"
+            logging.info("loading '%s'", query)
+            loader = PyPDFLoader(query)
 
-        documents = loader.load_and_split()
-        logging.info("loaded '%s'", query)
-        snippets = chunk_by_file_type(
-            [Document(text=doc.page_content) for doc in documents]
-        )
-        index = VectorStoreIndex(snippets, storage_context=storage_context)
-        logging.info("snipped '%s'", query)
+            documents = loader.load_and_split()
+            logging.info("loaded '%s'", query)
+            snippets = chunk_by_file_type(
+                [Document(text=doc.page_content) for doc in documents]
+            )
+            logging.info("snipped '%s'", query)
 
-        logging.info("done w/ '%s'", query)
+            logging.info("done w/ '%s'", query)
 
-        ret.append(
-            f"uploaded '{article_title}' ({query}) with {len(snippets)} snippets"
-        )
+            ret.append(
+                f"uploaded '{article_title}' ({query}) with {len(snippets)} snippets"
+            )
+
+        except Exception as e:
+            logging.exception(e)
+            ret.append(f"failed to upload '{article_title}' using ({query})")
 
     return {"message": ret}
 
 
 @app.post("/corpus")
-def add_corpus(
-    file: UploadFile, file_type: FileTypes, options: Optional[ChunkingOptions] = None
-):
+def add_corpus(file: UploadFile):
     global index
     logging.info("received file: '%s'", file.filename)
 
@@ -133,10 +125,7 @@ def add_corpus(
 
     logging.info("chunked file into %d lines", len(snippets))
 
-    if index is None:
-        index = VectorStoreIndex(snippets, storage_context=storage_context)
-    else:
-        index.insert_nodes(snippets)
+    index.insert_nodes(snippets)
 
     return {"message": f"uploaded {file.filename} with {len(snippets)} snippets"}
 
