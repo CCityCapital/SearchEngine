@@ -5,3 +5,4 @@ __pycache__/
 cdk.out/
 cdk.context.json
 *.env
+test-data/*

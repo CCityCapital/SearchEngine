@@ -1,16 +1,12 @@
-from typing import Tuple
 from aws_cdk import (
     Environment,
     Fn,
-    aws_autoscaling as autoscaling,
     aws_ec2 as ec2,
     aws_ecs as ecs,
     aws_ecs_patterns as ecs_patterns,
-    aws_ecr as ecr,
     aws_ecr_assets as ecr_assets,
-    aws_events as events,
+    aws_secretsmanager as secretsmanager,
     App,
-    CfnOutput,
     Stack,
 )
 from constructs import Construct
@@ -23,7 +19,12 @@ CURR_DIR = Path(os.path.dirname(__file__))
 
 class CorpusStack(Stack):
     def __init__(
-        self, scope: Construct, construct_id: str, vpc_id: str, **kwargs
+        self,
+        scope: Construct,
+        construct_id: str,
+        vpc_id: str,
+        secret_arn: str,
+        **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
         self.construct_id = construct_id
@@ -37,7 +38,13 @@ class CorpusStack(Stack):
             cluster_name=f"{construct_id}-qa-cluster",
         )
 
-        vector_db, embedding_service = self.create_vector_db()
+        self.open_api_secret = secretsmanager.Secret.from_secret_complete_arn(
+            self,
+            f"{construct_id}-open-api-secret",
+            secret_complete_arn=secret_arn,
+        )
+
+        vector_db = self.create_vector_db()
 
         qa_api = ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
@@ -65,42 +72,26 @@ class CorpusStack(Stack):
                         ],
                     )
                 },
+                secrets={
+                    "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(
+                        self.open_api_secret
+                    )
+                },
             ),
             task_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
         )
 
+        # allow task execution role to retrieve secrets
+        self.open_api_secret.grant_read(qa_api.task_definition.execution_role)
+
+        # api depends on vector db to be up and running
+        qa_api.node.add_dependency(vector_db)
+
     def create_vector_db(
         self,
-    ) -> Tuple[
-        ecs_patterns.ApplicationLoadBalancedFargateService,
-        ecs_patterns.ApplicationLoadBalancedFargateService,
-    ]:
+    ) -> ecs_patterns.ApplicationLoadBalancedFargateService:
         backend_subnets = ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC)
 
-        embedding_service = ecs_patterns.ApplicationLoadBalancedFargateService(
-            self,
-            f"{self.construct_id}-qa-embedding-service",
-            service_name=f"{self.construct_id}-qa-embedding-service",
-            cluster=self.qa_cluster,
-            desired_count=1,
-            cpu=1024,
-            memory_limit_mib=2048,
-            assign_public_ip=True,
-            task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
-                image=ecs.ContainerImage.from_registry(
-                    "semitechnologies/transformers-inference:sentence-transformers-multi-qa-MiniLM-L6-cos-v1"
-                ),
-                container_port=8080,
-            ),
-            task_subnets=backend_subnets,
-            listener_port=8080,
-        )
-
-        embedding_service.target_group.configure_health_check(
-            path="/.well-known/live", healthy_http_codes="200-299"
-        )
-
-        embedding_service.load_balancer.health_check = None
         vector_db = ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
             f"{self.construct_id}-qa-weaviate-service",
@@ -119,16 +110,7 @@ class CorpusStack(Stack):
                     "QUERY_DEFAULTS_LIMIT": "20",
                     "AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED": "true",
                     "PERSISTENCE_DATA_PATH": "./test-data",
-                    "DEFAULT_VECTORIZER_MODULE": "text2vec-transformers",
-                    "ENABLE_MODULES": "text2vec-transformers",
-                    "TRANSFORMERS_INFERENCE_API": Fn.join(
-                        "",
-                        [
-                            "http://",
-                            embedding_service.load_balancer.load_balancer_dns_name,
-                            ":8080",
-                        ],
-                    ),
+                    "ENABLE_MODULES": "text2vec-openai,generative-openai",
                     "CLUSTER_HOSTNAME": "node1",
                 },
             ),
@@ -140,8 +122,7 @@ class CorpusStack(Stack):
             path="/v1/.well-known/ready", healthy_http_codes="200-299"
         )
 
-        vector_db.node.add_dependency(embedding_service)
-        return vector_db, embedding_service
+        return vector_db
 
 
 app = App()
@@ -151,6 +132,7 @@ CorpusStack(
     "corpus-query-dev",
     vpc_id="vpc-04d3285b792f77374",
     env=Environment(region="us-east-2", account="631140025723"),
+    secret_arn="arn:aws:secretsmanager:us-east-2:631140025723:secret:dev/open-api-secret-aSQKKG",
 )
 
 app.synth()
