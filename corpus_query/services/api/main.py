@@ -103,6 +103,8 @@ def load_wikipedia_corpus(corpus: WikiRequest):
 
             logging.info("done w/ '%s'", query)
 
+            index.insert_nodes(snippets)
+
             ret.append(
                 f"uploaded '{article_title}' ({query}) with {len(snippets)} snippets"
             )

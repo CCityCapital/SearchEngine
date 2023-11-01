@@ -2,6 +2,8 @@ version: "3.4"
 
 services:
   weaviate:
+    volumes:
+      - ./test-data:/test-data
     image: semitechnologies/weaviate:1.19.9
     restart: on-failure:0
     ports:
